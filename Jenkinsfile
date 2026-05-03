@@ -5,14 +5,14 @@ pipeline {
         IMAGE_NAME = "suman2304/myapp"
         SONAR_PROJECT_KEY = "suman023_Learning_cicdproject"
         SONAR_ORG = "suman023"
-        SONAR_TOKEN = "3d6c52810766bd7390ed6ae7cd14211394facf91"
     }
 
     stages {
 
         stage('Clone') {
             steps {
-                git 'https://github.com/suman023/Learning_cicdproject.git'
+                git branch: 'main',
+                    url: 'https://github.com/suman023/Learning_cicdproject.git'
             }
         }
 
@@ -32,25 +32,30 @@ pipeline {
             steps {
                 sh '''
                     sudo docker build -t ${IMAGE_NAME}:${BUILD_NUMBER} .
-                    
+                    sudo docker tag ${IMAGE_NAME}:${BUILD_NUMBER} ${IMAGE_NAME}:latest
                     sudo docker push ${IMAGE_NAME}:${BUILD_NUMBER}
-                    
+                    sudo docker push ${IMAGE_NAME}:latest
                 '''
             }
         }
 
         stage('Sonar Scan') {
             steps {
-                sh '''
-                    docker run --rm \
-                        -e SONAR_HOST_URL="https://sonarcloud.io" \
-                        -e SONAR_TOKEN="${SONAR_TOKEN}" \
-                        -v "$(pwd):/usr/src" \
-                        sonarsource/sonar-scanner-cli \
-                        -Dsonar.projectKey=${SONAR_PROJECT_KEY} \
-                        -Dsonar.organization=${SONAR_ORG} \
-                        -Dsonar.sources=.
-                '''
+                withCredentials([string(
+                    credentialsId: 'sonar-token',
+                    variable: 'SONAR_TOKEN'
+                )]) {
+                    sh '''
+                        docker run --rm \
+                            -e SONAR_HOST_URL="https://sonarcloud.io" \
+                            -e SONAR_TOKEN="$SONAR_TOKEN" \
+                            -v "$(pwd):/usr/src" \
+                            sonarsource/sonar-scanner-cli \
+                            -Dsonar.projectKey=${SONAR_PROJECT_KEY} \
+                            -Dsonar.organization=${SONAR_ORG} \
+                            -Dsonar.sources=.
+                    '''
+                }
             }
         }
 
@@ -90,15 +95,9 @@ pipeline {
             steps {
                 mail(
                     to: 'sumanshit023@gmail.com',
-                    subject: "Build ${currentBuild.result}: ${env.JOB_NAME} #${env.BUILD_NUMBER}",
-                    body: """
-                        Job Name  : ${env.JOB_NAME}
-                        Build No  : ${env.BUILD_NUMBER}
-                        Status    : ${currentBuild.result}
-                        Build URL : ${env.BUILD_URL}
-                    """
+                    subject: "✅ Build Success: ${env.JOB_NAME} #${env.BUILD_NUMBER}",
+                    body: "Job: ${env.JOB_NAME}\nBuild: ${env.BUILD_NUMBER}\nURL: ${env.BUILD_URL}"
                 )
-
                 slackSend(
                     channel: '#jenkinsslackwp',
                     color: 'good',
@@ -112,23 +111,16 @@ pipeline {
         always {
             sh 'sudo docker logout'
         }
-        success {
-            slackSend(
-                channel: '#jenkinsslackwp',
-                color: 'good',
-                message: "✅ SUCCESS: ${env.JOB_NAME} #${env.BUILD_NUMBER} - ${env.BUILD_URL}"
-            )
-        }
         failure {
-            slackSend(
-                channel: '#jenkinsslackwp',
-                color: 'danger',
-                message: "❌ FAILED: ${env.JOB_NAME} #${env.BUILD_NUMBER} - ${env.BUILD_URL}"
-            )
             mail(
                 to: 'sumanshit023@gmail.com',
                 subject: "❌ Build Failed: ${env.JOB_NAME} #${env.BUILD_NUMBER}",
                 body: "Build failed! Check: ${env.BUILD_URL}"
+            )
+            slackSend(
+                channel: '#jenkinsslackwp',
+                color: 'danger',
+                message: "❌ Build Failed: ${env.JOB_NAME} #${env.BUILD_NUMBER} - ${env.BUILD_URL}"
             )
         }
     }
