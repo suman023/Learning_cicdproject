@@ -39,21 +39,32 @@ pipeline {
             }
         }
 
+        stage('Install SonarQube CLI') {
+            steps {
+                sh '''
+                    sudo wget -O sonar-scanner.zip https://binaries.sonarsource.com/Distribution/sonar-scanner-cli/sonar-scanner-cli-5.0.1.3006-linux.zip
+                    sudo apt install unzip -y
+                    sudo unzip -o -q sonar-scanner.zip
+                    sudo rm -rf /opt/sonar-scanner
+                    sudo mv --force sonar-scanner-5.0.1.3006-linux /opt/sonar-scanner
+                    sudo chmod +x /opt/sonar-scanner/bin/sonar-scanner
+                '''
+            }
+        }
+
         stage('Sonar Scan') {
             steps {
                 withCredentials([string(
                     credentialsId: 'sonar-token',
                     variable: 'SONAR_TOKEN'
                 )]) {
-                    sh '''
-                        docker run --rm \
-                            -e SONAR_HOST_URL="https://sonarcloud.io" \
-                            -e SONAR_TOKEN="$SONAR_TOKEN" \
-                            -v "$(pwd):/usr/src" \
-                            sonarsource/sonar-scanner-cli \
-                            -Dsonar.projectKey=${SONAR_PROJECT_KEY} \
-                            -Dsonar.organization=${SONAR_ORG} \
-                            -Dsonar.sources=.
+                    sh '''/opt/sonar-scanner/bin/sonar-scanner \
+                        -Dsonar.projectKey=${SONAR_PROJECT_KEY} \
+                        -Dsonar.organization=${SONAR_ORG} \
+                        -Dsonar.sources=. \
+                        -Dsonar.host.url=https://sonarcloud.io \
+                        -Dsonar.token=${SONAR_TOKEN} \
+                        -Dsonar.qualitygate.wait=false
                     '''
                 }
             }
